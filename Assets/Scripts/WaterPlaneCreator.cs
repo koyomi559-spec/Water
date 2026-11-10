@@ -8,7 +8,7 @@ public class WaterPlaneCreator : MonoBehaviour
     private void Start()
     {
         // segment表示细分成100个边
-        const int segments = 100;
+        const int segments = 200;
         // size表示平面具体大小
         const float size = 10f;
         //row表示每个边长的顶点数

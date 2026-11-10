@@ -12,6 +12,7 @@
         _FBM_Fre ("FBM Frequency", Range(1, 2)) = 1.18
         _SpecularStrength ("Specular Strength", Range(0, 1)) = 0.35
         _SpecularPower ("Specular Power", Range(1, 256)) = 64
+        [Toggle(_WATER_FRAGMENT_NORMALS)] _FragmentNormals ("Fragment Normals", Float) = 0
     }
 
     SubShader
@@ -33,8 +34,10 @@
 
             HLSLPROGRAM
             #pragma target 3.5
+            #pragma target 5.0 _WATER_FRAGMENT_NORMALS
             #pragma vertex vert
             #pragma fragment frag
+            #pragma shader_feature_local_fragment _ _WATER_FRAGMENT_NORMALS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -50,6 +53,7 @@
                 float _FBM_Fre;
                 float _SpecularStrength;
                 float _SpecularPower;
+                float _FragmentNormals;
             CBUFFER_END
 
             TEXTURE2D(_MainTex);
@@ -67,29 +71,28 @@
                 float2 uv : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
                 float3 positionWS : TEXCOORD2;
+                float2 waveXZ : TEXCOORD3;
             };
 
             float2 WaveDirection(int index)
             {
                 // 只用波的编号作为种子，方向不随位置或时间变化。
                 float2 seed = float2(index, index) * 0.2;
+                // 在 D3D 的片元变体中约束哈希的浮点运算，保持顶点路径原样。
+                #if defined(SHADER_API_D3D11) && defined(_WATER_FRAGMENT_NORMALS)
+                    precise
+                #endif
                 float random01 = frac(sin(dot(seed, float2(12.9898, 78.233))) * 43758.5453);
                 float angle = radians(random01 * 360.0);
                 return float2(cos(angle), sin(angle));
             }
 
-            Varyings vert(Attributes IN)
+            void EvaluateWaves(float2 p, float time, out float height, out float2 gradientXZ)
             {
-                Varyings OUT;
-                float3 positionOS = IN.positionOS;
-
-                // 1. 沿各波的方向取样，累加高度和 XZ 坡度。
-                float2 p = positionOS.xz;
-                float time = _Time.y * _WaveSpeed;
                 float amplitude = _WaveInt * 0.1;
                 float frequency = _WaveFreq;
-                float height = 0.0;
-                float2 gradientXZ = 0.0;
+                height = 0.0;
+                gradientXZ = 0.0;
                 int count = clamp(_WaveAmount, 0, 128);
 
                 for (int i = 1; i <= count; i++)
@@ -103,22 +106,47 @@
                     amplitude *= _FBM_Int;
                     frequency *= _FBM_Fre;
                 }
+            }
 
-                // 2. 用叠加后的总高度移动顶点，并用总坡度重建法线。
-                positionOS.y += height;
+            float3 WaveNormalWS(float2 gradientXZ)
+            {
                 float3 normalOS = normalize(float3(-gradientXZ.x, 1.0, -gradientXZ.y));
+                return TransformObjectToWorldNormal(normalOS);
+            }
+
+            Varyings vert(Attributes IN)
+            {
+                Varyings OUT;
+                float3 positionOS = IN.positionOS;
+
+                // 1. 两种法线模式都使用相同的顶点位移。
+                float height;
+                float2 gradientXZ;
+                EvaluateWaves(positionOS.xz, _Time.y * _WaveSpeed, height, gradientXZ);
+                positionOS.y += height;
 
                 OUT.positionWS = TransformObjectToWorld(positionOS);
                 OUT.positionCS = TransformWorldToHClip(OUT.positionWS);
-                OUT.normalWS = TransformObjectToWorldNormal(normalOS);
+                // 2. 分别传递顶点法线和用于片元求导的物体空间 XZ。
+                OUT.normalWS = WaveNormalWS(gradientXZ);
+                OUT.waveXZ = IN.positionOS.xz;
                 OUT.uv = TRANSFORM_TEX(IN.uv, _MainTex);
                 return OUT;
             }
 
             half4 frag(Varyings IN) : SV_Target
             {
-                // 3. 用主光漫反射显示坡面朝向。
-                float3 normalWS = normalize(IN.normalWS);
+                // 3. 对照：在片元位置重算坡度，或继续使用插值后的顶点法线。
+                #if defined(_WATER_FRAGMENT_NORMALS)
+                    float unusedHeight;
+                    float2 gradientXZ;
+                    EvaluateWaves(IN.waveXZ, _Time.y * _WaveSpeed, unusedHeight, gradientXZ);
+
+                    float3 normalWS = WaveNormalWS(gradientXZ);
+                #else
+                    float3 normalWS = normalize(IN.normalWS);
+                #endif
+
                 Light light = GetMainLight();
                 float nDotL = saturate(dot(normalWS, light.direction));
 

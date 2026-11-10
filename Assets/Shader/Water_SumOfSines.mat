@@ -11,7 +11,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: f3a96ee4856a6e54cadf6013dc73455c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _WATER_FRAGMENT_NORMALS
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -28,17 +29,16 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints:
-    - _WaveAmount: 9
+    - _WaveAmount: 10
     m_Floats:
     - _FBM_Fre: 1.18
     - _FBM_Int: 0.82
-    - _Metallic: 0
-    - _Smoothness: 0.5
+    - _FragmentNormals: 1
     - _SpecularPower: 64
     - _SpecularStrength: 0.35
-    - _WaveFreq: 3.25
-    - _WaveInt: 0.66
-    - _WaveSpeed: 3.2
+    - _WaveFreq: 2
+    - _WaveInt: 0.6
+    - _WaveSpeed: 4
     m_Colors:
-    - _MainColor: {r: 0.2783019, g: 0.36670214, b: 1, a: 1}
+    - _MainColor: {r: 0.2599235, g: 0.61199325, b: 0.9339623, a: 1}
   m_BuildTextureStacks: []
